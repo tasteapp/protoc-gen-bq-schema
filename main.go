@@ -30,7 +30,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/protoc-gen-bq-schema/protos"
+	"protoc-gen-bq-schema/protos"
 
 	"github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
@@ -158,41 +158,41 @@ func (pkg *ProtoPackage) relativelyLookupPackage(name string) (*ProtoPackage, bo
 
 var (
 	typeFromWKT = map[string]string{
-		".google.protobuf.Int32Value":  "INTEGER",
-		".google.protobuf.Int64Value":  "INTEGER",
-		".google.protobuf.UInt32Value": "INTEGER",
-		".google.protobuf.UInt64Value": "INTEGER",
-		".google.protobuf.DoubleValue": "FLOAT",
-		".google.protobuf.FloatValue":  "FLOAT",
-		".google.protobuf.BoolValue":   "BOOLEAN",
-		".google.protobuf.StringValue": "STRING",
-		".google.protobuf.BytesValue":  "BYTES",
-		".google.protobuf.Duration":    "STRING",
-		".google.protobuf.Timestamp":   "TIMESTAMP",
+		".google.protobuf.Int32Value":  "number",
+		".google.protobuf.Int64Value":  "number",
+		".google.protobuf.UInt32Value": "number",
+		".google.protobuf.UInt64Value": "number",
+		".google.protobuf.DoubleValue": "number",
+		".google.protobuf.FloatValue":  "number",
+		".google.protobuf.BoolValue":   "boolean",
+		".google.protobuf.StringValue": "string",
+		".google.protobuf.BytesValue":  "string",
+		".google.protobuf.Duration":    "string",
+		".google.protobuf.Timestamp":   "timestamp",
 	}
 	typeFromFieldType = map[descriptor.FieldDescriptorProto_Type]string{
-		descriptor.FieldDescriptorProto_TYPE_DOUBLE: "FLOAT",
-		descriptor.FieldDescriptorProto_TYPE_FLOAT:  "FLOAT",
+		descriptor.FieldDescriptorProto_TYPE_DOUBLE: "number",
+		descriptor.FieldDescriptorProto_TYPE_FLOAT:  "number",
 
-		descriptor.FieldDescriptorProto_TYPE_INT64:    "INTEGER",
-		descriptor.FieldDescriptorProto_TYPE_UINT64:   "INTEGER",
-		descriptor.FieldDescriptorProto_TYPE_INT32:    "INTEGER",
-		descriptor.FieldDescriptorProto_TYPE_UINT32:   "INTEGER",
-		descriptor.FieldDescriptorProto_TYPE_FIXED64:  "INTEGER",
-		descriptor.FieldDescriptorProto_TYPE_FIXED32:  "INTEGER",
-		descriptor.FieldDescriptorProto_TYPE_SFIXED32: "INTEGER",
-		descriptor.FieldDescriptorProto_TYPE_SFIXED64: "INTEGER",
-		descriptor.FieldDescriptorProto_TYPE_SINT32:   "INTEGER",
-		descriptor.FieldDescriptorProto_TYPE_SINT64:   "INTEGER",
+		descriptor.FieldDescriptorProto_TYPE_INT64:    "number",
+		descriptor.FieldDescriptorProto_TYPE_UINT64:   "number",
+		descriptor.FieldDescriptorProto_TYPE_INT32:    "number",
+		descriptor.FieldDescriptorProto_TYPE_UINT32:   "number",
+		descriptor.FieldDescriptorProto_TYPE_FIXED64:  "number",
+		descriptor.FieldDescriptorProto_TYPE_FIXED32:  "number",
+		descriptor.FieldDescriptorProto_TYPE_SFIXED32: "number",
+		descriptor.FieldDescriptorProto_TYPE_SFIXED64: "number",
+		descriptor.FieldDescriptorProto_TYPE_SINT32:   "number",
+		descriptor.FieldDescriptorProto_TYPE_SINT64:   "number",
 
-		descriptor.FieldDescriptorProto_TYPE_STRING: "STRING",
-		descriptor.FieldDescriptorProto_TYPE_BYTES:  "BYTES",
-		descriptor.FieldDescriptorProto_TYPE_ENUM:   "STRING",
+		descriptor.FieldDescriptorProto_TYPE_STRING: "string",
+		descriptor.FieldDescriptorProto_TYPE_BYTES:  "string",
+		descriptor.FieldDescriptorProto_TYPE_ENUM:   "string",
 
-		descriptor.FieldDescriptorProto_TYPE_BOOL: "BOOLEAN",
+		descriptor.FieldDescriptorProto_TYPE_BOOL: "boolean",
 
-		descriptor.FieldDescriptorProto_TYPE_GROUP:   "RECORD",
-		descriptor.FieldDescriptorProto_TYPE_MESSAGE: "RECORD",
+		descriptor.FieldDescriptorProto_TYPE_GROUP:   "map",
+		descriptor.FieldDescriptorProto_TYPE_MESSAGE: "map",
 	}
 
 	modeFromFieldLabel = map[descriptor.FieldDescriptorProto_Label]string{
@@ -222,6 +222,17 @@ func convertField(curPkg *ProtoPackage, desc *descriptor.FieldDescriptorProto, m
 	}
 
 	opts := desc.GetOptions()
+	if opts != nil && proto.HasExtension(opts, protos.E_BigqueryOpts) {
+		rawOpt, err := proto.GetExtension(opts, protos.E_BigqueryOpts)
+		if err != nil {
+			return nil, err
+		}
+		opt := *rawOpt.(*protos.BigQueryMessageOptions)
+		if len(opt.GetTypeOverride()) > 0 {
+			field.Type = opt.GetTypeOverride()
+			return field, nil
+		}
+	}
 	if opts != nil && proto.HasExtension(opts, protos.E_Bigquery) {
 		rawOpt, err := proto.GetExtension(opts, protos.E_Bigquery)
 		if err != nil {
@@ -250,7 +261,7 @@ func convertField(curPkg *ProtoPackage, desc *descriptor.FieldDescriptorProto, m
 		}
 	}
 
-	if field.Type != "RECORD" {
+	if field.Type != "map" {
 		return field, nil
 	}
 	if t, ok := typeFromWKT[desc.GetTypeName()]; ok {
@@ -347,7 +358,7 @@ func convertFile(file *descriptor.FileDescriptorProto) ([]*plugin.CodeGeneratorR
 		}
 
 		resFile := &plugin.CodeGeneratorResponse_File{
-			Name:    proto.String(fmt.Sprintf("%s/%s.schema", strings.Replace(file.GetPackage(), ".", "/", -1), tableName)),
+			Name:    proto.String(fmt.Sprintf("%s/%s.json", strings.Replace(file.GetPackage(), ".", "/", -1), tableName)),
 			Content: proto.String(string(jsonSchema)),
 		}
 		response = append(response, resFile)

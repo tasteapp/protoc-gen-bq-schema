@@ -33,7 +33,6 @@ extend google.protobuf.MessageOptions {
   // There was no backwards compatible way to make this change. Sorry for
   // the inconvenience.
 
-
   // BigQuery message schema generation options.
   //
   // The field number is a globally unique id for this option, assigned by
@@ -44,10 +43,14 @@ extend google.protobuf.MessageOptions {
 message BigQueryMessageOptions {
   // Specifies a name of table in BigQuery for the message.
   //
-  // If not blank, indicates the message is a type of record to be stored into BigQuery.
+  // If not blank, indicates the message is a type of record to be stored into
+  // BigQuery.
   string table_name = 1;
 
   // If true, BigQuery field names will default to a field's JSON name,
   // not its original/proto field name.
   bool use_json_names = 2;
+
+  // Replaces this entire message with this type.
+  string type_override = 3;
 }
