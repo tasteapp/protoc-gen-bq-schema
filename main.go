@@ -51,7 +51,6 @@ var (
 type Field struct {
 	Name        string   `json:"name"`
 	Type        string   `json:"type"`
-	Mode        string   `json:"mode"`
 	Description string   `json:"description,omitempty"`
 	Fields      []*Field `json:"fields,omitempty"`
 }
@@ -211,7 +210,11 @@ func convertField(curPkg *ProtoPackage, desc *descriptor.FieldDescriptorProto, m
 	}
 
 	var ok bool
-	field.Mode, ok = modeFromFieldLabel[desc.GetLabel()]
+	mode, ok := modeFromFieldLabel[desc.GetLabel()]
+	if mode == "REPEATED" {
+		field.Type = "array"
+		return field, nil
+	}
 	if !ok {
 		return nil, fmt.Errorf("unrecognized field label: %s", desc.GetLabel().String())
 	}
@@ -222,17 +225,6 @@ func convertField(curPkg *ProtoPackage, desc *descriptor.FieldDescriptorProto, m
 	}
 
 	opts := desc.GetOptions()
-	if opts != nil && proto.HasExtension(opts, protos.E_BigqueryOpts) {
-		rawOpt, err := proto.GetExtension(opts, protos.E_BigqueryOpts)
-		if err != nil {
-			return nil, err
-		}
-		opt := *rawOpt.(*protos.BigQueryMessageOptions)
-		if len(opt.GetTypeOverride()) > 0 {
-			field.Type = opt.GetTypeOverride()
-			return field, nil
-		}
-	}
 	if opts != nil && proto.HasExtension(opts, protos.E_Bigquery) {
 		rawOpt, err := proto.GetExtension(opts, protos.E_Bigquery)
 		if err != nil {
@@ -242,10 +234,6 @@ func convertField(curPkg *ProtoPackage, desc *descriptor.FieldDescriptorProto, m
 		if opt.Ignore {
 			// skip the field below
 			return nil, nil
-		}
-
-		if opt.Require {
-			field.Mode = "REQUIRED"
 		}
 
 		if len(opt.TypeOverride) > 0 {
@@ -277,6 +265,10 @@ func convertField(curPkg *ProtoPackage, desc *descriptor.FieldDescriptorProto, m
 	if err != nil {
 		return nil, err
 	}
+	if len(fieldMsgOpts.GetTypeOverride()) > 0 {
+		field.Type = fieldMsgOpts.GetTypeOverride()
+		return field, nil
+	}
 	field.Fields, err = convertMessageType(curPkg, recordType, fieldMsgOpts)
 	if err != nil {
 		return nil, err
@@ -295,6 +287,11 @@ func convertMessageType(curPkg *ProtoPackage, msg *descriptor.DescriptorProto, o
 	}
 
 	for _, fieldDesc := range msg.GetField() {
+		mode, _ := modeFromFieldLabel[fieldDesc.GetLabel()]
+		if mode == "REPEATED" {
+			// https://github.com/firebase/extensions/issues/298
+			continue
+		}
 		field, err := convertField(curPkg, fieldDesc, opts)
 		if err != nil {
 			glog.Errorf("Failed to convert field %s in %s: %v", fieldDesc.GetName(), msg.GetName(), err)
@@ -350,8 +347,13 @@ func convertFile(file *descriptor.FileDescriptorProto) ([]*plugin.CodeGeneratorR
 			glog.Errorf("Failed to convert %s: %v", name, err)
 			return nil, err
 		}
+		topSchema := struct {
+			Fields []*Field `json:"fields"`
+		}{
+			schema,
+		}
 
-		jsonSchema, err := json.MarshalIndent(schema, "", " ")
+		jsonSchema, err := json.MarshalIndent(topSchema, "", " ")
 		if err != nil {
 			glog.Error("Failed to encode schema", err)
 			return nil, err
